@@ -3,8 +3,9 @@
 # unit tests or attached debugger would save many hours
 # auto-rerun would be nice
 # auto or manual console clear would be nice
-
-
+# some way of displaying numbers as hex in the bubbles.
+# sometimes my format strings don't apply at all.
+# can't display quote character in resulting strings, they get html encoded.
 
 
 from saleae.analyzers import HighLevelAnalyzer, AnalyzerFrame, StringSetting, NumberSetting, ChoicesSetting
@@ -49,13 +50,35 @@ encoding_lookup = {
 }
 
 addresses = {
-    'sop': [1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1],
-    'sop1': [1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0],
-    'sop11': [1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0],
-    'hard_reset': [0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1],
-    'cable_reset': [0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0],
-    'sop1_debug': [1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0],
-    'sop11_debug': [1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1],
+    'SOP': [1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1],
+    'SOP\'': [1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0],
+    'SOP\'\'': [1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0],
+    'Hard Reset': [0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1],
+    'Cable Reset': [0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 0],
+    'SOP\'_debug': [1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0],
+    'SOP\'\'_debug': [1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1],
+}
+
+data_commands = {
+    1: 'Source_Capabilities',
+    2: 'Request',
+    3: 'BIST',
+    4: 'Sink_Capabilities',
+    5: 'Battery_Status',
+    6: 'Alert',
+    7: 'Get_Contry_Info',
+    8: 'Get_Contry_Info',
+}
+
+control_commands = {
+    1: 'GoodCRC',
+    2: 'GotoMin',
+    3: 'Accept',
+    4: 'Reject',
+    5: 'Ping',
+    6: 'PS_RDY',
+    7: 'Get_Source_Cap',
+    8: 'Get_Sink_Cap',
 }
 
 
@@ -76,10 +99,10 @@ class Hla(HighLevelAnalyzer):
 
     # An optional list of types this analyzer produces, providing a way to customize the way frames are displayed in Logic 2.
     result_types = {
-        'preamble': {'format': 'preamble'},
-        'address': {'format': 'Address {{data.address}}'},
-        'header': {'format': 'header {{data.count}} {{data.header}}'},
-        'object': {'format': 'Object {{data.index}}: {{data}}'},
+        'preamble': {'format': 'Preamble'},
+        'address': {'format': 'Start Of Packet: {{data.address}}'},
+        'header': {'format': '# of Objects: {{data.number_of_objects}} Message ID: {{data.message_id}} Command Code: {{data.command_code}} Spec Revision: {{data.spec_revision}}'},
+        'object': {'format': 'Object {{data.index}}: {{data.data}}'},
         'crc': {'format': 'CRC: {{data.crc}}'},
         'eop': {'format': 'end of packet'}
     }
@@ -126,36 +149,37 @@ class Hla(HighLevelAnalyzer):
                     preamble_start = frame.start_time
                 if x == 7:
                     preamble_end = frame.end_time
+            print('Preamble')
             next = yield AnalyzerFrame('preamble', preamble_start, preamble_end, {})
 
             address_word = yield from self.get_bits(next, 20)
             self.leftover_bits.extend(address_word.data)
             address_cmd = self.decode_address(self.leftover_bits)
             self.leftover_bits = self.leftover_bits[20:]
+            print(address_cmd)
             next = yield AnalyzerFrame('address', address_word.start_time, address_word.end_time, {'address': address_cmd})
-
 
             header_word = yield from self.get_bits(next, 20)
             header_decoded = self.bits_to_bytes(header_word.data, 2)
             header_int = int.from_bytes(header_decoded, "little")
             object_count = (header_int >> 12) & 0x07
-            # object_count = 7
-            next = yield AnalyzerFrame('header', header_word.start_time, header_word.end_time, {'count': object_count, 'header': hex(header_int)})
 
+            # object_count = 7
+            print(self.decode_header(header_int))
+            next = yield AnalyzerFrame('header', header_word.start_time, header_word.end_time, self.decode_header(header_int))
 
             for object_index in range(object_count):
                 object_word = yield from self.get_bits(next, 40)
                 object_decoded = self.bits_to_bytes(object_word.data, 4)
                 object_int = int.from_bytes(object_decoded, "little")
-                next = yield AnalyzerFrame('object', object_word.start_time, object_word.end_time, {'data': hex(object_int)})           
+                print('data object {data}'.format(data = hex(object_int)))
+                next = yield AnalyzerFrame('object', object_word.start_time, object_word.end_time, {'index': object_index, 'data': hex(object_int)})
 
             crc_word = yield from self.get_bits(next, 40)
             crc_decoded = self.bits_to_bytes(crc_word.data, 4)
             crc_int = int.from_bytes(crc_decoded, "little")
-            next =yield AnalyzerFrame('crc', crc_word.start_time, crc_word.end_time, { 'crc': crc_int })
-
-        
-
+            print('crc {crc}'.format(crc=hex(crc_int)))
+            next = yield AnalyzerFrame('crc', crc_word.start_time, crc_word.end_time, {'crc': hex(crc_int)})
 
     def get_bits(self, first_frame, num_bits):
         bits_needed = max(num_bits - len(self.leftover_bits), 0)
@@ -179,17 +203,18 @@ class Hla(HighLevelAnalyzer):
                     fraction = len(self.leftover_bits) / 8 * 0.9
                     span = float(frame.end_time - frame.start_time)
                     adjustment = fraction * span
-                    word_start = frame.start_time - GraphTimeDelta(second=adjustment)
+                    word_start = frame.start_time - \
+                        GraphTimeDelta(second=adjustment)
             if x == bytes_to_read-1:
                 word_end = frame.end_time
                 if extra_bits > 0:
                     fraction = extra_bits / 8 * 0.9
                     span = float(frame.end_time - frame.start_time)
                     adjustment = fraction * span
-                    word_end = frame.end_time - GraphTimeDelta(second=adjustment)
+                    word_end = frame.end_time - \
+                        GraphTimeDelta(second=adjustment)
             raw_bits.extend(self.byte_to_bits(frame.data['data']))
         return Word(word_start, word_end, raw_bits)
-
 
     def bits_to_bytes(self, new_bits, num_bytes):
         decoded = bytearray(num_bytes)
@@ -240,4 +265,20 @@ class Hla(HighLevelAnalyzer):
                     match = False
             if match == True:
                 return address
-        return 'unknown'
+        return 'Unknown SOP*'
+
+    def decode_header(self, header):
+        number_of_objects = (header >> 12) & 0x07
+        command_code = header & 0xF
+        if number_of_objects == 0:
+            if command_code in control_commands:
+                command_code = control_commands[command_code]
+        else:
+            if command_code in data_commands:
+                command_code = data_commands[command_code]            
+        return {
+            'number_of_objects': number_of_objects,
+            'message_id': (header >> 9) & 0x07,
+            'spec_revision': (header >> 6) & 0x03,
+            'command_code': str(command_code)
+        }
