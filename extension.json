@@ -1,0 +1,13 @@
+{
+  "name": "USB PD (Biphase Mark Code)",
+  "apiVersion": "1.0.0",
+  "author": "Mark",
+  "version": "0.0.1",
+  "description": "Decodes USB PC CC Pin with BMC encoding",
+  "extensions": {
+    "USB PD (Biphase Mark Code)": {
+      "type": "HighLevelAnalyzer",
+      "entryPoint": "HighLevelAnalyzer.Hla"
+    }
+  }
+}
