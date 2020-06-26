@@ -1,33 +1,27 @@
 # Feedback:
 # could not figure out where to import GraphTime from, had to check our unit tests.
 # unit tests or attached debugger would save many hours
-# auto-rerun would be nice
+# auto-rerun on save would be nice
 # auto or manual console clear would be nice
-# some way of displaying numbers as hex in the bubbles.
-# sometimes my format strings don't apply at all.
-# can't display quote character in resulting strings, they get html encoded.
+# some way of displaying numbers as hex in the bubbles, besides converting to string.
+# sometimes my format strings don't apply at all. reloading the analyzer fixes this.
+# can't display quote character in resulting strings, they get html encoded. (nevermind, this just requires and extra set of {} in the format string to display the string as raw.)
+# we have way too much data to effectively display in the data table or the graph display, we need to support efficient object display somehow.
 
 
 from saleae.analyzers import HighLevelAnalyzer, AnalyzerFrame, StringSetting, NumberSetting, ChoicesSetting
 from saleae.data import GraphTime, GraphTimeDelta
-from enum import Enum
+
+from MessageHandling import *
 
 # https://www.embedded.com/usb-type-c-and-power-delivery-101-power-delivery-protocol/
-# preamble: 8 bytes of 0x55
-# address. 2 bytes.
-# header. 2 bytes.
-# [3:0] command code
-# [4]: 0
-# [5] role?
-# [6:7] spec revision
-# [8] role?
-# [11:9] message id
-# [14:12] number of data objects
-# data objects. each is 4 bytes. between 0 and 7, count in header.
-# crc: 4 bytes
-# eop: end of packet, 4 bits. likely not accessable from the manchester analyzer, so ignored.
+# official documentation: https://www.usb.org/document-library/usb-power-delivery
 
-# 4b5b encoding
+
+# TODO / Future Features:
+# add support for extended headers
+# decode all data objects
+# verify the CRC
 
 
 encoding_lookup = {
@@ -60,25 +54,94 @@ addresses = {
 }
 
 data_commands = {
-    1: 'Source_Capabilities',
-    2: 'Request',
-    3: 'BIST',
-    4: 'Sink_Capabilities',
-    5: 'Battery_Status',
-    6: 'Alert',
-    7: 'Get_Contry_Info',
-    8: 'Get_Contry_Info',
+    0b00000: 'Reserved',
+    0b00001: 'Source_Capabilities',
+    0b00010: 'Request',
+    0b00011: 'BIST',
+    0b00100: 'Sink_Capabilities',
+    0b00101: 'Battery_Status',
+    0b00110: 'Alert',
+    0b00111: 'Get_Country_Info',
+    0b01000: 'Enter_USB',
+    0b01001: 'Reserved',
+    0b01010: 'Reserved',
+    0b01011: 'Reserved',
+    0b01100: 'Reserved',
+    0b01101: 'Reserved',
+    0b01110: 'Reserved',
+    0b01111: 'Vendor_Defined',
+    0b10000: 'Reserved',
+    0b10001: 'Reserved',
+    0b10010: 'Reserved',
+    0b10011: 'Reserved',
+    0b10100: 'Reserved',
+    0b10101: 'Reserved',
+    0b10110: 'Reserved',
+    0b10111: 'Reserved',
+    0b11000: 'Reserved',
+    0b11001: 'Reserved',
+    0b11010: 'Reserved',
+    0b11011: 'Reserved',
+    0b11100: 'Reserved',
+    0b11101: 'Reserved',
+    0b11110: 'Reserved',
+    0b11111: 'Reserved'
 }
 
 control_commands = {
-    1: 'GoodCRC',
-    2: 'GotoMin',
-    3: 'Accept',
-    4: 'Reject',
-    5: 'Ping',
-    6: 'PS_RDY',
-    7: 'Get_Source_Cap',
-    8: 'Get_Sink_Cap',
+    0b00000: 'Reserved',
+    0b00001: 'GoodCRC',
+    0b00010: 'GotoMin',
+    0b00011: 'Accept',
+    0b00100: 'Reject',
+    0b00101: 'Ping',
+    0b00110: 'PS_RDY',
+    0b00111: 'Get_Source_Cap',
+    0b01000: 'Get_Sink_Cap',
+    0b01001: 'DR_Swap',
+    0b01010: 'PR_Swap',
+    0b01011: 'VCONN_Swap',
+    0b01100: 'Wait',
+    0b01101: 'Soft_Reset',
+    0b01110: 'Data_Reset',
+    0b01111: 'Data_Reset_Complete',
+    0b10000: 'Not_Supported',
+    0b10001: 'Get_Source_Cap_Extended',
+    0b10010: 'Get_Status',
+    0b10011: 'FR_Swap',
+    0b10100: 'Get_PPS_Status',
+    0b10101: 'Get_Country_Codes',
+    0b10110: 'Get_Sink_Cap_extended',
+    0b10111: 'Reserved',
+    0b11000: 'Reserved',
+    0b11001: 'Reserved',
+    0b11010: 'Reserved',
+    0b11011: 'Reserved',
+    0b11100: 'Reserved',
+    0b11101: 'Reserved',
+    0b11110: 'Reserved',
+    0b11111: 'Reserved',
+}
+
+power_port_role = {
+    0: 'Sink',
+    1: 'Source'
+}
+cable_plug = {
+    0: 'from DFP or UFP',
+    1: 'from cable plug'
+}
+
+revision = {
+    0: '1.0',
+    1: '2.0',
+    2: 'Reserved',
+    3: 'Reserved'
+}
+
+port_data_role = {
+    0: 'UFP',
+    1: 'DFP'
 }
 
 
@@ -92,25 +155,38 @@ class Word():
         self.end_time = end_time
         self.data = data
 
-# High level analyzers must subclass the HighLevelAnalyzer class.
-
 
 class Hla(HighLevelAnalyzer):
 
     # An optional list of types this analyzer produces, providing a way to customize the way frames are displayed in Logic 2.
     result_types = {
         'preamble': {'format': 'Preamble'},
-        'address': {'format': 'Start Of Packet: {{data.address}}'},
+        'address': {'format': 'Start Of Packet: {{{data.address}}}'},
         'header': {'format': '# of Objects: {{data.number_of_objects}} Message ID: {{data.message_id}} Command Code: {{data.command_code}} Spec Revision: {{data.spec_revision}}'},
-        'object': {'format': 'Object {{data.index}}: {{data.data}}'},
+
+        'source_fixed_supply_pdo': {'format': '[{{data.index}}] [{{data.raw}}] {{data.data_object_type}}; {{data.pdo_type}}; Dual Role Power: {{data.dual_role_power}}; USB Suspend Supported: {{data.usb_suspend_supported}}; USB Communications Supported: {{data.usb_communications_capable}} Dual Role Data: {{data.dual_role_data}}; Unchecked Extended Messages Supported: {{data.unchecked_extended_messages_supported}}; Peak Current: {{data.peak_current}}; Voltage (50mV units): {{data.voltage_50mv_units}}; Maximum Current (10mA units): {{data.maximum_current_10ma_units}}'},
+
+        'source_variable_supply_pdo': {'format': '[{{data.index}}] [{{data.raw}}] {{data.data_object_type}}; {{data.pdo_type}}; maximum_voltage_50mv_units: {{data.maximum_voltage_50mv_units}}; minimum_voltage_50mv_units: {{data.minimum_voltage_50mv_units}}; maximum_current_10ma_units: {{data.maximum_current_10ma_units}}'},
+
+        'source_battery_supply_pdo': {'format': '[{{data.index}}] [{{data.raw}}] {{data.data_object_type}}; {{data.pdo_type}}; maximum_voltage_50mv_units: {{data.maximum_voltage_50mv_units}}; minimum_voltage_50mv_units: {{data.minimum_voltage_50mv_units}}; maximum_allowable_power_250mw_units: {{data.maximum_allowable_power_250mw_units}}'},
+
+        'source_programmable_supply_pdo': {'format': '[{{data.index}}] [{{data.raw}}] {{data.data_object_type}}; {{data.pdo_type}}; maximum_voltage_100mv_units: {{data.maximum_voltage_100mv_units}}; minimum_voltage_100mv_units: {{data.minimum_voltage_100mv_units}}; maximum_current_50ma_units: {{data.maximum_current_50ma_units}}'},
+
+        'sink_fixed_supply_pdo': {'format': '[{{data.index}}] [{{data.raw}}] {{data.data_object_type}}; {{data.pdo_type}}; Dual Role Power: {{data.dual_role_power}}; USB Suspend Supported: {{data.usb_suspend_supported}}; Unconstrained Power: {{data.unconstrained_power}}; USB Communications Supported: {{data.usb_communications_capable}}; Dual Role Data: {{data.dual_role_data}}; Fast Role Swap Required Current: {{data.fast_role_swap_required_current}}; Voltage (50mV units): {{data.voltage_50mv_units}}; Operational Current (10mA units): {{data.operational_current_10ma_units}}'},
+
+        'sink_variable_supply_pdo': {'format': '[{{data.index}}] [{{data.raw}}] {{data.data_object_type}}; {{data.pdo_type}}; maximum_voltage_50mv_units: {{data.maximum_voltage_50mv_units}}; minimum_voltage_50mv_units: {{data.minimum_voltage_50mv_units}}; maximum_current_10ma_units: {{data.maximum_current_10ma_units}}'},
+
+        'sink_battery_supply_pdo': {'format': '[{{data.index}}] [{{data.raw}}] {{data.data_object_type}}; {{data.pdo_type}}; maximum_voltage_50mv_units: {{data.maximum_voltage_50mv_units}}; minimum_voltage_50mv_units: {{data.minimum_voltage_50mv_units}}; maximum_allowable_power_250mw_units: {{data.maximum_allowable_power_250mw_units}}'},
+
+        'sink_programmable_supply_pdo': {'format': '[{{data.index}}] [{{data.raw}}] {{data.data_object_type}}; {{data.pdo_type}}; maximum_voltage_100mv_units: {{data.maximum_voltage_100mv_units}}; minimum_voltage_100mv_units: {{data.minimum_voltage_100mv_units}}; maximum_current_50ma_units: {{data.maximum_current_50ma_units}}'},
+
+        'object': {'format': '{{data.index}} {{data.data}}'},
         'crc': {'format': 'CRC: {{data.crc}}'},
         'eop': {'format': 'end of packet'}
     }
 
     def __init__(self):
-        self.result = None
         self.engine = None
-        self.word_result = None
         self.leftover_bits = []
 
     def decode(self, frame: AnalyzerFrame):
@@ -163,17 +239,25 @@ class Hla(HighLevelAnalyzer):
             header_decoded = self.bits_to_bytes(header_word.data, 2)
             header_int = int.from_bytes(header_decoded, "little")
             object_count = (header_int >> 12) & 0x07
-
+            header_data = self.decode_header(header_int, address_cmd)
             # object_count = 7
-            print(self.decode_header(header_int))
-            next = yield AnalyzerFrame('header', header_word.start_time, header_word.end_time, self.decode_header(header_int))
+            print(header_data)
+            next = yield AnalyzerFrame('header', header_word.start_time, header_word.end_time, header_data)
 
             for object_index in range(object_count):
                 object_word = yield from self.get_bits(next, 40)
                 object_decoded = self.bits_to_bytes(object_word.data, 4)
                 object_int = int.from_bytes(object_decoded, "little")
-                print('data object {data}'.format(data = hex(object_int)))
-                next = yield AnalyzerFrame('object', object_word.start_time, object_word.end_time, {'index': object_index, 'data': hex(object_int)})
+                data_object_data = {'index': object_index, 'data': hex(object_int)}
+                data_object_type = 'object'
+                if header_data['command_code'] == 'Source_Capabilities':
+                    
+                    frame_type, data_object_data = decode_source_power_data_object(object_int)
+                    data_object_type = frame_type
+                    data_object_data['index'] = object_index
+                    data_object_data['raw'] = hex(object_int)
+                print(data_object_data)
+                next = yield AnalyzerFrame(data_object_type, object_word.start_time, object_word.end_time, data_object_data)
 
             crc_word = yield from self.get_bits(next, 40)
             crc_decoded = self.bits_to_bytes(crc_word.data, 4)
@@ -267,18 +351,33 @@ class Hla(HighLevelAnalyzer):
                 return address
         return 'Unknown SOP*'
 
-    def decode_header(self, header):
+    def decode_header(self, header, sop_type):
         number_of_objects = (header >> 12) & 0x07
-        command_code = header & 0xF
+        message_id = (header >> 9) & 0x07
+        spec_revision = (header >> 6) & 0x03
+        command_code = header & 0x1F
         if number_of_objects == 0:
             if command_code in control_commands:
                 command_code = control_commands[command_code]
         else:
             if command_code in data_commands:
-                command_code = data_commands[command_code]            
-        return {
+                command_code = data_commands[command_code]
+
+        data = {
             'number_of_objects': number_of_objects,
-            'message_id': (header >> 9) & 0x07,
-            'spec_revision': (header >> 6) & 0x03,
+            'message_id': message_id,
+            'spec_revision': spec_revision,
             'command_code': str(command_code)
         }
+
+        if sop_type == 'SOP':
+            _power_port_role = (header >> 8) & 0x01
+            _port_data_role = (header >> 5) & 0x01
+            data['power_port_role'] = power_port_role[_power_port_role]
+            data['port_data_role'] = port_data_role[_port_data_role]
+        else:
+            _cable_plug = (header >> 8) & 0x01
+            data['cable_plug'] = cable_plug[_cable_plug]
+        return data
+
+
