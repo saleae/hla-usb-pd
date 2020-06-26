@@ -19,8 +19,9 @@ from MessageHandling import *
 
 
 # TODO / Future Features:
-# add support for extended headers
-# decode all data objects
+# add support for extended headers and data blocks
+# decode all vendor data objects. (header is done)
+# ID Header VDO, Cert Stat VDO, Product VDO UFP VDO 1/2, DFP VDO, Passive cable VDO, Active Cable VDO 1/2, AMA VDO, VPD VDO,Discover SVIDs Responder VDO,
 # verify the CRC
 
 
@@ -161,7 +162,9 @@ class Hla(HighLevelAnalyzer):
     # An optional list of types this analyzer produces, providing a way to customize the way frames are displayed in Logic 2.
     result_types = {
         'preamble': {'format': 'Preamble'},
+
         'address': {'format': 'Start Of Packet: {{{data.address}}}'},
+
         'header': {'format': '# of Objects: {{data.number_of_objects}} Message ID: {{data.message_id}} Command Code: {{data.command_code}} Spec Revision: {{data.spec_revision}}'},
 
         'source_fixed_supply_pdo': {'format': '[{{data.index}}] [{{data.raw}}] {{data.data_object_type}}; {{data.pdo_type}}; Dual Role Power: {{data.dual_role_power}}; USB Suspend Supported: {{data.usb_suspend_supported}}; USB Communications Supported: {{data.usb_communications_capable}} Dual Role Data: {{data.dual_role_data}}; Unchecked Extended Messages Supported: {{data.unchecked_extended_messages_supported}}; Peak Current: {{data.peak_current}}; Voltage (50mV units): {{data.voltage_50mv_units}}; Maximum Current (10mA units): {{data.maximum_current_10ma_units}}'},
@@ -180,8 +183,33 @@ class Hla(HighLevelAnalyzer):
 
         'sink_programmable_supply_pdo': {'format': '[{{data.index}}] [{{data.raw}}] {{data.data_object_type}}; {{data.pdo_type}}; maximum_voltage_100mv_units: {{data.maximum_voltage_100mv_units}}; minimum_voltage_100mv_units: {{data.minimum_voltage_100mv_units}}; maximum_current_50ma_units: {{data.maximum_current_50ma_units}}'},
 
+
+        'bdo': {'format': '{{data.data_object_type}} BIST Mode: {{data.bist_mode}}'},
+
+        'fixed_supply_rdo': {'format': '{{data.data_object_type}} Object Position: {{data.object_position}}; Giveback Flag: {{data.giveback_flag}}; Capability Missmatch: {{data.capability_mismatch}}; usb_communications_capable: {{data.usb_communications_capable}}; no_usb_suspend: {{data.no_usb_suspend}}; unchunked_extended_messages_supported: {{data.unchunked_extended_messages_supported}}; operating_current_10ma_units: {{data.operating_current_10ma_units}}; maximum_operating_current_10ma_units: {{data.maximum_operating_current_10ma_units}}; '},
+
+        'variable_supply_rdo': {'format': '{{data.data_object_type}} Object Position: {{data.object_position}}; Giveback Flag: {{data.giveback_flag}}; Capability Missmatch: {{data.capability_mismatch}}; usb_communications_capable: {{data.usb_communications_capable}}; no_usb_suspend: {{data.no_usb_suspend}}; unchunked_extended_messages_supported: {{data.unchunked_extended_messages_supported}}; operating_current_10ma_units: {{data.operating_current_10ma_units}}; maximum_operating_current_10ma_units: {{data.maximum_operating_current_10ma_units}}; '},
+
+        'battery_rdo': {'format': '{{data.data_object_type}} object_position: {{data.object_position}}; giveback_flag: {{data.giveback_flag}}; capability_mismatch: {{data.capability_mismatch}}; usb_communications_capable: {{data.usb_communications_capable}}; no_usb_suspend: {{data.no_usb_suspend}}; unchunked_extended_messages_supported: {{data.unchunked_extended_messages_supported}}; operating_power_250mw_units: {{data.operating_power_250mw_units}}; maximum_operating_power_250mw_units: {{data.maximum_operating_power_250mw_units}}'},
+
+        'programmable_supply_rdo': {'format': '{{data.data_object_type}} object_position: {{data.object_position}}; capability_mismatch: {{data.capability_mismatch}}; usb_communications_capable: {{data.usb_communications_capable}}; no_usb_suspend: {{data.no_usb_suspend}}; unchunked_extended_messages_supported: {{data.unchunked_extended_messages_supported}}; output_voltage_20mV_units: {{data.output_voltage_20mV_units}}; operating_current_50ma_unites: {{data.operating_current_50ma_unites}}'},
+
+        'structured_header_vdo': {'format': '{{data.data_object_type}} vendor_id: {{data.vendor_id}}; vdm_type: {{data.vdm_type}}; structured_vdm_version: {{data.structured_vdm_version}}; object_position: {{data.object_position}}; command_type: {{data.command_type}}; command: {{data.command}}'},
+
+        'unstructured_header_vdo': {'format': '{{data.data_object_type}} vendor_id: {{data.vendor_id}}; vdm_type: {{data.vdm_type}}'},
+
+        'bsdo': {'format': '{{data.data_object_type}} invalid_battery_reference: {{data.invalid_battery_reference}}; battery_is_present: {{data.battery_is_present}}; battery_charging_status: {{data.battery_charging_status}}'},
+
+        'ado': {'format': '{{data.data_object_type}} fixed_batteries: {{data.fixed_batteries}}; hot_swappable_batteries: {{data.hot_swappable_batteries}}; battery_status_change_event: {{data.battery_status_change_event}}; ocp_event: {{data.ocp_event}}; otp_event: {{data.otp_event}}; operating_condition_change: {{data.operating_condition_change}}; source_input_change: {{data.source_input_change}}; ovp_event: {{data.ovp_event}}'},
+
+        'ccdo': {'format': '{{data.data_object_type}} country_code: {{data.country_code}}'},
+
+        'eudo': {'format': '{{data.data_object_type}} usb_mode: {{data.usb_mode}}; usb4_drd: {{data.usb4_drd}}; usb3_drd: {{data.usb3_drd}}; cable_speed: {{data.cable_speed}}; cable_type: {{data.cable_type}}; cable_current: {{data.cable_current}}; pcie_support: {{data.pcie_support}}; dp_support: {{data.dp_support}}; tbt_support: {{data.tbt_support}}; host_present: {{data.host_present}}'},
+
         'object': {'format': '{{data.index}} {{data.data}}'},
+
         'crc': {'format': 'CRC: {{data.crc}}'},
+
         'eop': {'format': 'end of packet'}
     }
 
@@ -248,14 +276,65 @@ class Hla(HighLevelAnalyzer):
                 object_word = yield from self.get_bits(next, 40)
                 object_decoded = self.bits_to_bytes(object_word.data, 4)
                 object_int = int.from_bytes(object_decoded, "little")
-                data_object_data = {'index': object_index, 'data': hex(object_int)}
+                data_object_data = {
+                    'index': object_index, 'data': hex(object_int)}
                 data_object_type = 'object'
                 if header_data['command_code'] == 'Source_Capabilities':
-                    
-                    frame_type, data_object_data = decode_source_power_data_object(object_int)
+                    frame_type, data_object_data = decode_source_power_data_object(
+                        object_int)
                     data_object_type = frame_type
                     data_object_data['index'] = object_index
                     data_object_data['raw'] = hex(object_int)
+                elif header_data['command_code'] == 'Request':
+                    frame_type, data_object_data = decode_request_data_object(
+                        object_int)
+                    data_object_type = frame_type
+                    data_object_data['index'] = object_index
+                    data_object_data['raw'] = hex(object_int)
+                elif header_data['command_code'] == 'BIST':
+                    frame_type, data_object_data = decode_bist_data_object(
+                        object_int)
+                    data_object_type = frame_type
+                    data_object_data['index'] = object_index
+                    data_object_data['raw'] = hex(object_int)
+                elif header_data['command_code'] == 'Sink_Capabilities':
+                    frame_type, data_object_data = decode_sink_power_data_object(
+                        object_int)
+                    data_object_type = frame_type
+                    data_object_data['index'] = object_index
+                    data_object_data['raw'] = hex(object_int)
+                elif header_data['command_code'] == 'Battery_Status':
+                    frame_type, data_object_data = decode_battery_status_data_object(
+                        object_int)
+                    data_object_type = frame_type
+                    data_object_data['index'] = object_index
+                    data_object_data['raw'] = hex(object_int)
+                elif header_data['command_code'] == 'Alert':
+                    frame_type, data_object_data = decode_alert_data_object(
+                        object_int)
+                    data_object_type = frame_type
+                    data_object_data['index'] = object_index
+                    data_object_data['raw'] = hex(object_int)
+                elif header_data['command_code'] == 'Get_Country_Info':
+                    frame_type, data_object_data = decode_get_country_info_data_object(
+                        object_int)
+                    data_object_type = frame_type
+                    data_object_data['index'] = object_index
+                    data_object_data['raw'] = hex(object_int)
+                elif header_data['command_code'] == 'Enter_USB':
+                    frame_type, data_object_data = decode_enter_usb_data_object(
+                        object_int)
+                    data_object_type = frame_type
+                    data_object_data['index'] = object_index
+                    data_object_data['raw'] = hex(object_int)
+                elif header_data['command_code'] == 'Vendor_Defined' and object_index == 0:
+                    frame_type, data_object_data = decode_vendor_header_data_object(
+                        object_int)
+                    data_object_type = frame_type
+                    data_object_data['index'] = object_index
+                    data_object_data['raw'] = hex(object_int)
+                # TODO: support all vendor requests
+                # TODO: support extended headers, and data blocks
                 print(data_object_data)
                 next = yield AnalyzerFrame(data_object_type, object_word.start_time, object_word.end_time, data_object_data)
 
@@ -379,5 +458,3 @@ class Hla(HighLevelAnalyzer):
             _cable_plug = (header >> 8) & 0x01
             data['cable_plug'] = cable_plug[_cable_plug]
         return data
-
-
