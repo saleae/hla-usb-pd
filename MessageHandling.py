@@ -71,7 +71,7 @@ battery_charging_status = {
 }
 
 # 5 bit command. 7-15
-vdo_command: {
+vdo_command = {
     0b00000: 'Reserved',
     0b00001: 'Discover Identity',
     0b00010: 'Discover SVIDs',
