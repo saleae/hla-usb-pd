@@ -10,6 +10,7 @@ This HLA is based on the USB PD 3.0 specification: https://www.usb.org/document-
 2. Add the Saleae Manchester analyzer with the following settings
    - Mode: Bi-Phase Mark Code (FM1)
    - Bit Rate: 300000
+   - Bits per Frame: 8 bits per Transfer
 3. add the USB PD (Biphase Mark Code) Analyzer, and select the Manchester analyzer as the input
 
 ### This decoder is not yet complete!
