@@ -216,6 +216,7 @@ class Hla(HighLevelAnalyzer):
     def __init__(self):
         self.engine = None
         self.leftover_bits = []
+        self.source_capabilities_pdo_types = {}
 
     def decode(self, frame: AnalyzerFrame):
         '''
@@ -285,9 +286,12 @@ class Hla(HighLevelAnalyzer):
                     data_object_type = frame_type
                     data_object_data['index'] = object_index
                     data_object_data['raw'] = hex(object_int)
+                    self.source_capabilities_pdo_types[object_index] = data_object_data['pdo_type']
                 elif header_data['command_code'] == 'Request':
+                    object_position = (object_int >> 28) & 0x7
+                    source_capabilities_pdo_type = self.source_capabilities_pdo_types[object_position-1]
                     frame_type, data_object_data = decode_request_data_object(
-                        object_int)
+                        object_int, source_capabilities_pdo_type)
                     data_object_type = frame_type
                     data_object_data['index'] = object_index
                     data_object_data['raw'] = hex(object_int)
