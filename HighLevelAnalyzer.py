@@ -210,7 +210,9 @@ class Hla(HighLevelAnalyzer):
 
         'crc': {'format': 'CRC: {{data.crc}}'},
 
-        'eop': {'format': 'end of packet'}
+        'eop': {'format': 'end of packet'},
+
+        'error': { 'format': 'error: {{{data.error}}} [{{data.raw}}]' }
     }
 
     def __init__(self):
@@ -289,12 +291,16 @@ class Hla(HighLevelAnalyzer):
                     self.source_capabilities_pdo_types[object_index] = data_object_data['pdo_type']
                 elif header_data['command_code'] == 'Request':
                     object_position = (object_int >> 28) & 0x7
-                    source_capabilities_pdo_type = self.source_capabilities_pdo_types[object_position-1]
-                    frame_type, data_object_data = decode_request_data_object(
-                        object_int, source_capabilities_pdo_type)
-                    data_object_type = frame_type
-                    data_object_data['index'] = object_index
-                    data_object_data['raw'] = hex(object_int)
+                    if len(self.source_capabilities_pdo_types) >= object_position:
+                        source_capabilities_pdo_type = self.source_capabilities_pdo_types[object_position-1]
+                        frame_type, data_object_data = decode_request_data_object(
+                            object_int, source_capabilities_pdo_type)
+                        data_object_type = frame_type
+                        data_object_data['index'] = object_index
+                        data_object_data['raw'] = hex(object_int)
+                    else:
+                        data_object_type = 'error'
+                        data_object_data = { 'error': '"Request" for object position "{}" received without "Source_Capabilities" message observed first'.format(str(object_position)), 'raw': hex(object_int) }
                 elif header_data['command_code'] == 'BIST':
                     frame_type, data_object_data = decode_bist_data_object(
                         object_int)
