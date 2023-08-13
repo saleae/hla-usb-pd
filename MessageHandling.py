@@ -439,7 +439,7 @@ def decode_get_country_info_data_object(word):
     second_character = (word >> 16) & 0xF
 
     data['country_code'] = '{first}{second}'.format(
-        first=chr(first_character), second=char(second_character))
+        first=chr(first_character), second=chr(second_character))
 
     return frame_type, data
 
